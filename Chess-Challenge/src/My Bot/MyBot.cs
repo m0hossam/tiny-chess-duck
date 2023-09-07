@@ -4,36 +4,84 @@ using ChessChallenge.API;
 public class MyBot : IChessBot
 {
     public Board theBoard;
-    public int infinity = 999999999;
+    public const int infinity = 999999999;
+    public int[] pieceSquareTable =
+    {
+        //Pawns
+        0,  0,  0,  0,  0,  0,  0,  0,
+        50, 50, 50, 50, 50, 50, 50, 50,
+        10, 10, 20, 30, 30, 20, 10, 10,
+        5,  5, 10, 25, 25, 10,  5,  5,
+        0,  0,  0, 20, 20,  0,  0,  0,
+        5, -5,-10,  0,  0,-10, -5,  5,
+        5, 10, 10,-20,-20, 10, 10,  5,
+        0,  0,  0,  0,  0,  0,  0,  0,
+        //Knights
+        -50,-40,-30,-30,-30,-30,-40,-50,
+        -40,-20,  0,  0,  0,  0,-20,-40,
+        -30,  0, 10, 15, 15, 10,  0,-30,
+        -30,  5, 15, 20, 20, 15,  5,-30,
+        -30,  0, 15, 20, 20, 15,  0,-30,
+        -30,  5, 10, 15, 15, 10,  5,-30,
+        -40,-20,  0,  5,  5,  0,-20,-40,
+        -50,-40,-30,-30,-30,-30,-40,-50,
+        //Bishops
+        -20,-10,-10,-10,-10,-10,-10,-20,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -10,  0,  5, 10, 10,  5,  0,-10,
+        -10,  5,  5, 10, 10,  5,  5,-10,
+        -10,  0, 10, 10, 10, 10,  0,-10,
+        -10, 10, 10, 10, 10, 10, 10,-10,
+        -10,  5,  0,  0,  0,  0,  5,-10,
+        -20,-10,-10,-10,-10,-10,-10,-20,
+        //Rooks
+        0,  0,  0,  0,  0,  0,  0,  0,
+        5, 10, 10, 10, 10, 10, 10,  5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        0,  0,  0,  5,  5,  0,  0,  0,
+        //Queens
+        -20,-10,-10, -5, -5,-10,-10,-20,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -10,  0,  5,  5,  5,  5,  0,-10,
+        -5,  0,  5,  5,  5,  5,  0, -5,
+        0,  0,  5,  5,  5,  5,  0, -5,
+        -10,  5,  5,  5,  5,  5,  0,-10,
+        -10,  0,  5,  0,  0,  0,  0,-10,
+        -20,-10,-10, -5, -5,-10,-10,-20,
+        //Kings in opening
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -20,-30,-30,-40,-40,-30,-30,-20,
+        -10,-20,-20,-20,-20,-20,-20,-10,
+        20, 20,  0,  0,  0,  0, 20, 20,
+        20, 30, 10,  0,  0, 10, 30, 20
+    };
+    public int[] pieceWeights = { 100, 320, 330, 500, 900, 20000 };
 
     public int Evaluate()
     {
+        int materialScore = 0;
+        int activityScore = 0;
         PieceList[] pieceLists = theBoard.GetAllPieceLists();
-        int wP = pieceLists[0].Count,
-            wN = pieceLists[1].Count,
-            wB = pieceLists[2].Count,
-            wR = pieceLists[3].Count,
-            wQ = pieceLists[4].Count,
-            wK = pieceLists[5].Count,
-            bP = pieceLists[6].Count,
-            bN = pieceLists[7].Count,
-            bB = pieceLists[8].Count,
-            bR = pieceLists[9].Count,
-            bQ = pieceLists[10].Count,
-            bK = pieceLists[11].Count,
-            pawnWt = 100,
-            knightWt = 320,
-            bishopWt = 330,
-            rookWt = 500,
-            queenWt = 900,
-            kingWt = 20000;
-        int materialScore = kingWt * (wK - bK)
-            + queenWt * (wQ - bQ)
-            + rookWt * (wR - bR)
-            + knightWt * (wN - bN)
-            + bishopWt * (wB - bB)
-            + pawnWt * (wP - bP);
-        int eval = (materialScore) * (theBoard.IsWhiteToMove ? 1 : -1);
+        for (int i = 0; i < 12; i++)
+        {
+            materialScore += pieceLists[i].Count * pieceWeights[i % 6] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
+            for (int j = 0; j < pieceLists[i].Count; j++)
+            {
+                int file = pieceLists[i].GetPiece(j).Square.File; //column
+                int rank = pieceLists[i].GetPiece(j).Square.Rank; //row
+                int index = pieceLists[i].IsWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
+                activityScore += pieceSquareTable[index + 64 * (i % 6)] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
+            }
+        }
+
+        int eval = (materialScore + activityScore) * (theBoard.IsWhiteToMove ? 1 : -1);
         return eval;
     }
 
@@ -61,7 +109,7 @@ public class MyBot : IChessBot
 
     public int AlphaBeta(int alpha, int beta, int depth)
     {
-        if (depth == 0) return Quiesce(alpha, beta);
+        if (depth == 0) return Evaluate();//Quiesce(alpha, beta);
         Move[] moves = theBoard.GetLegalMoves();
         foreach (Move move in moves)
         {
@@ -80,7 +128,7 @@ public class MyBot : IChessBot
     {
         theBoard = board;
 
-        int depth = 1;
+        int depth = 3;
         Move[] moves = theBoard.GetLegalMoves();
         Move bestMove = moves[0];
         if (depth == 0) return bestMove;
