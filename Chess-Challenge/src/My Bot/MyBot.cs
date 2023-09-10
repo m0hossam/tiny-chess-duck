@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections.Immutable;
 using ChessChallenge.API;
 
 public class MyBot : IChessBot
 {
     public Board theBoard;
+    public Timer theTimer; //might be needed in the future
     public const int infinity = 999999999;
+    public int[] pieceWeights = { 100, 320, 330, 500, 900, 20000 }; // P, N, B, R, Q, K
     public int[] pieceSquareTable =
     {
         //Pawns
@@ -62,7 +65,6 @@ public class MyBot : IChessBot
         20, 20,  0,  0,  0,  0, 20, 20,
         20, 30, 10,  0,  0, 10, 30, 20
     };
-    public int[] pieceWeights = { 100, 320, 330, 500, 900, 20000 };
 
     public int Evaluate()
     {
@@ -85,18 +87,33 @@ public class MyBot : IChessBot
         return eval;
     }
 
-    int Quiesce(int alpha, int beta) //takes too much time
+    public Move[] OrderMoves(Move[] moves)
+    {
+        Array.Sort(moves, CaptureMoveComparer);
+        return moves;
+    }
+
+    public int CaptureMoveComparer(Move moveA, Move moveB) // MVV - LVA: Most Valuable Victim - Least Valuable Aggressor
+    {
+        return (pieceWeights[(int)moveB.CapturePieceType - 1] - pieceWeights[(int)moveB.MovePieceType - 1])
+            - (pieceWeights[(int)moveA.CapturePieceType - 1] - pieceWeights[(int)moveA.MovePieceType - 1]);
+    }
+
+    public int Quiesce(int alpha, int beta, int calls) //needs more time optimization
     {
         int standPat = Evaluate();
         if (standPat >= beta)
             return beta;
         if (alpha < standPat)
             alpha = standPat;
-        Move[] moves = theBoard.GetLegalMoves(true);
+        if (calls > 5) //cutoff after 5 consecutive captures to reduce time
+            return alpha;
+        Move[] moves = theBoard.GetLegalMoves(true); //captures only
+        moves = OrderMoves(moves);
         foreach (Move move in moves)
         {
             theBoard.MakeMove(move);
-            int score = -Quiesce(-beta, -alpha);
+            int score = -Quiesce(-beta, -alpha, calls + 1);
             theBoard.UndoMove(move);
 
             if (score >= beta)
@@ -109,7 +126,8 @@ public class MyBot : IChessBot
 
     public int AlphaBeta(int alpha, int beta, int depth)
     {
-        if (depth == 0) return Evaluate();//Quiesce(alpha, beta);
+        if (depth == 0)
+            return Quiesce(alpha, beta, 0);
         Move[] moves = theBoard.GetLegalMoves();
         foreach (Move move in moves)
         {
@@ -127,6 +145,7 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         theBoard = board;
+        theTimer = timer;
 
         int depth = 3;
         Move[] moves = theBoard.GetLegalMoves();
