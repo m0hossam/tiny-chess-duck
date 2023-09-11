@@ -1,85 +1,82 @@
 ﻿using System;
-using System.Collections.Immutable;
 using ChessChallenge.API;
 
 public class MyBot : IChessBot
 {
-    public Board theBoard;
-    public Timer theTimer; //might be needed in the future
     public const int infinity = 999999999;
-    public int[] pieceWeights = { 100, 320, 330, 500, 900, 20000 }; // P, N, B, R, Q, K
-    public int[] pieceSquareTable =
+    public Board theBoard;
+    public Timer theTimer; //might be needed in the future (REMOVE IF UNNECESSARY)
+    public bool compressed = true;
+    public int[] pieceWeight = { 100, 320, 330, 500, 900, 20000 }; // P, N, B, R, Q, K
+    public int[] PST = new int[384];
+    public ulong[] compressedPST =
     {
-        //Pawns
-        0,  0,  0,  0,  0,  0,  0,  0,
-        50, 50, 50, 50, 50, 50, 50, 50,
-        10, 10, 20, 30, 30, 20, 10, 10,
-        5,  5, 10, 25, 25, 10,  5,  5,
-        0,  0,  0, 20, 20,  0,  0,  0,
-        5, -5,-10,  0,  0,-10, -5,  5,
-        5, 10, 10,-20,-20, 10, 10,  5,
-        0,  0,  0,  0,  0,  0,  0,  0,
-        //Knights
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,  0,  0,  0,-20,-40,
-        -30,  0, 10, 15, 15, 10,  0,-30,
-        -30,  5, 15, 20, 20, 15,  5,-30,
-        -30,  0, 15, 20, 20, 15,  0,-30,
-        -30,  5, 10, 15, 15, 10,  5,-30,
-        -40,-20,  0,  5,  5,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        //Bishops
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5, 10, 10,  5,  0,-10,
-        -10,  5,  5, 10, 10,  5,  5,-10,
-        -10,  0, 10, 10, 10, 10,  0,-10,
-        -10, 10, 10, 10, 10, 10, 10,-10,
-        -10,  5,  0,  0,  0,  0,  5,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        //Rooks
-        0,  0,  0,  0,  0,  0,  0,  0,
-        5, 10, 10, 10, 10, 10, 10,  5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        0,  0,  0,  5,  5,  0,  0,  0,
-        //Queens
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5,  5,  5,  5,  0,-10,
-        -5,  0,  5,  5,  5,  5,  0, -5,
-        0,  0,  5,  5,  5,  5,  0, -5,
-        -10,  5,  5,  5,  5,  5,  0,-10,
-        -10,  0,  5,  0,  0,  0,  0,-10,
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        //Kings in opening
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -20,-30,-30,-40,-40,-30,-30,-20,
-        -10,-20,-20,-20,-20,-20,-20,-10,
-        20, 20,  0,  0,  0,  0, 20, 20,
-        20, 30, 10,  0,  0, 10, 30, 20
+        9259542123273814144,
+        12876550765177647794,
+        9982954933006404234,
+        9621248571257554309,
+        9259542209508704384,
+        9618411723462966149,
+        9622655752112605829,
+        9259542123273814144,
+        5645370307605846094,
+        6371608862222478424,
+        7097825361929076834,
+        7099238255929820514,
+        7097830881046265954,
+        7099232736812631394,
+        6371608883781200984,
+        5645370307605846094,
+        7815564454513768044,
+        8538966182894534774,
+        8538971723570446454,
+        8540379098454001014,
+        8538977221128913014,
+        8541791970896022134,
+        8540373557778089334,
+        7815564454513768044,
+        9259542123273814144,
+        9622655881464941189,
+        8899254153084174459,
+        8899254153084174459,
+        8899254153084174459,
+        8899254153084174459,
+        8899254153084174459,
+        9259542144832536704,
+        7815564476072490604,
+        8538966182894534774,
+        8538971702011723894,
+        8899259672201363579,
+        9259547642391003259,
+        8540379076895277174,
+        8538971680452673654,
+        7815564476072490604,
+        7086511107012581474,
+        7086511107012581474,
+        7086511107012581474,
+        7086511107012581474,
+        7809912835393348204,
+        8533314606891560054,
+        10706323503566591124,
+        10709149248450633364
     };
 
     public int Evaluate()
     {
+        if (theBoard.IsDraw())
+            return 0;
         int materialScore = 0;
         int activityScore = 0;
         PieceList[] pieceLists = theBoard.GetAllPieceLists();
         for (int i = 0; i < 12; i++)
         {
-            materialScore += pieceLists[i].Count * pieceWeights[i % 6] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
+            materialScore += pieceLists[i].Count * pieceWeight[i % 6] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
             for (int j = 0; j < pieceLists[i].Count; j++)
             {
                 int file = pieceLists[i].GetPiece(j).Square.File; //column
                 int rank = pieceLists[i].GetPiece(j).Square.Rank; //row
                 int index = pieceLists[i].IsWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
-                activityScore += pieceSquareTable[index + 64 * (i % 6)] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
+                activityScore += PST[index + 64 * (i % 6)] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
             }
         }
 
@@ -95,8 +92,8 @@ public class MyBot : IChessBot
 
     public int CaptureMoveComparer(Move moveA, Move moveB) // MVV - LVA: Most Valuable Victim - Least Valuable Aggressor
     {
-        return (pieceWeights[(int)moveB.CapturePieceType - 1] - pieceWeights[(int)moveB.MovePieceType - 1])
-            - (pieceWeights[(int)moveA.CapturePieceType - 1] - pieceWeights[(int)moveA.MovePieceType - 1]);
+        return (pieceWeight[(int)moveB.CapturePieceType - 1] - pieceWeight[(int)moveB.MovePieceType - 1])
+            - (pieceWeight[(int)moveA.CapturePieceType - 1] - pieceWeight[(int)moveA.MovePieceType - 1]);
     }
 
     public int Quiesce(int alpha, int beta, int calls) //needs more time optimization
@@ -128,6 +125,8 @@ public class MyBot : IChessBot
     {
         if (depth == 0)
             return Quiesce(alpha, beta, 0);
+        if (theBoard.IsDraw())
+            return 0;
         Move[] moves = theBoard.GetLegalMoves();
         foreach (Move move in moves)
         {
@@ -146,6 +145,24 @@ public class MyBot : IChessBot
     {
         theBoard = board;
         theTimer = timer;
+
+        // Unpack PST
+        if (compressed)
+        {
+            compressed = false;
+            int offset = 128;
+            for (int i = 0; i < 8 * 6; i++)
+            {
+                for (int j = 0; j < 8; j++)
+                {
+                    ulong mask = (ulong)0b11111111 << (8 * (7 - (j % 8)));
+                    ulong val = (ulong)(compressedPST[i] & mask) >> (8 * (7 - (j % 8)));
+                    int trueVal = (int)val - offset;
+                    PST[j + i * 8] = trueVal;
+
+                }
+            }
+        }
 
         int depth = 3;
         Move[] moves = theBoard.GetLegalMoves();
@@ -166,7 +183,9 @@ public class MyBot : IChessBot
                 bestScore = score;
                 bestMove = move;
             }
+            //Console.WriteLine($"Move: {move.StartSquare.Name}{move.TargetSquare.Name} | Score: {score}");
         }
+        //Console.WriteLine($"Best Move: {bestMove.StartSquare.Name}{bestMove.TargetSquare.Name} | Best Score: {bestScore}\n");
         return bestMove;
     }
 }
