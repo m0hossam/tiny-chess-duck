@@ -1,15 +1,31 @@
 ﻿using System;
 using ChessChallenge.API;
 
+// I think hash collisions are causing blunders ??!
+
 public class MyBot : IChessBot
 {
-    public const int infinity = 999999999;
+    public struct Transposition
+    {
+        public ulong zKey = 0;
+        public Move move = Move.NullMove;
+        public int eval = 0;
+        public sbyte depth = -128;
+        public sbyte flag = INVALID;
+
+        public Transposition()
+        {
+        }
+    }
+    public const ulong TPT_MASK = 0x7FFFFF;
+    public const sbyte INVALID = 0, LOWER = 1, UPPER = 2, EXACT = 3;
+    public const int INFINITY = 999999999;
+    public Move rootBestMove;
+    public Transposition[] tpt = new Transposition[TPT_MASK + 1];
     public Board theBoard;
-    public Timer theTimer; //might be needed in the future (REMOVE IF UNNECESSARY)
-    public bool compressed = true;
     public int[] pieceWeight = { 100, 320, 330, 500, 900, 20000 }; // P, N, B, R, Q, K
-    public int[] PST = new int[384];
-    public ulong[] compressedPST =
+    public int[] pst = new int[384];
+    public ulong[] packedPST =
     {
         9259542123273814144,
         12876550765177647794,
@@ -61,10 +77,35 @@ public class MyBot : IChessBot
         10709149248450633364
     };
 
+    public MyBot()
+    {
+        // Unpack PST
+        int offset = 128;
+        for (int i = 0; i < 8 * 6; i++)
+        {
+            for (int j = 0; j < 8; j++)
+            {
+                ulong mask = (ulong)0b11111111 << (8 * (7 - (j % 8)));
+                ulong val = (ulong)(packedPST[i] & mask) >> (8 * (7 - (j % 8)));
+                int trueVal = (int)val - offset;
+                pst[j + i * 8] = trueVal;
+
+            }
+        }
+    }
+
+    public int MoveScore(Move move)
+    {
+        int score = 0;
+
+        if (move.IsCapture)
+            return 10 * pieceWeight[(int)move.CapturePieceType - 1] - pieceWeight[(int)move.MovePieceType - 1];
+
+        return score;
+    }
+
     public int Evaluate()
     {
-        if (theBoard.IsDraw())
-            return 0;
         int materialScore = 0;
         int activityScore = 0;
         PieceList[] pieceLists = theBoard.GetAllPieceLists();
@@ -76,7 +117,7 @@ public class MyBot : IChessBot
                 int file = pieceLists[i].GetPiece(j).Square.File; //column
                 int rank = pieceLists[i].GetPiece(j).Square.Rank; //row
                 int index = pieceLists[i].IsWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
-                activityScore += PST[index + 64 * (i % 6)] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
+                activityScore += pst[index + 64 * (i % 6)] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
             }
         }
 
@@ -84,108 +125,107 @@ public class MyBot : IChessBot
         return eval;
     }
 
-    public Move[] OrderMoves(Move[] moves)
+    public int Search(int alpha, int beta, int depth, bool root) // Fail-Soft Alpha Beta + Quiescent Search
     {
-        Array.Sort(moves, CaptureMoveComparer);
-        return moves;
-    }
+        if (theBoard.IsDraw())
+            return 0;
+        if (theBoard.IsInCheckmate())
+            return -INFINITY; // should this be alpha? does it make a difference?
 
-    public int CaptureMoveComparer(Move moveA, Move moveB) // MVV - LVA: Most Valuable Victim - Least Valuable Aggressor
-    {
-        return (pieceWeight[(int)moveB.CapturePieceType - 1] - pieceWeight[(int)moveB.MovePieceType - 1])
-            - (pieceWeight[(int)moveA.CapturePieceType - 1] - pieceWeight[(int)moveA.MovePieceType - 1]);
-    }
+        ref Transposition tp = ref tpt[theBoard.ZobristKey & TPT_MASK];
 
-    public int Quiesce(int alpha, int beta, int calls) //needs more time optimization
-    {
-        int standPat = Evaluate();
-        if (standPat >= beta)
-            return beta;
-        if (alpha < standPat)
-            alpha = standPat;
-        if (calls > 5) //cutoff after 5 consecutive captures to reduce time
-            return alpha;
-        Move[] moves = theBoard.GetLegalMoves(true); //captures only
-        moves = OrderMoves(moves);
-        foreach (Move move in moves)
+        if (!root && tp.zKey == theBoard.ZobristKey && tp.depth >= depth)
         {
-            theBoard.MakeMove(move);
-            int score = -Quiesce(-beta, -alpha, calls + 1);
-            theBoard.UndoMove(move);
+            if (tp.flag == EXACT) 
+                return tp.eval;
+            if (tp.flag == LOWER && tp.eval >= beta) 
+                return tp.eval;
+            if (tp.flag == UPPER && tp.eval <= alpha) 
+                return tp.eval;
+        }
+
+        bool qsearch = depth <= 0;
+        if (qsearch)
+        {
+            int standPat = Evaluate();
+            if (standPat >= beta)
+                return standPat;
+            if (alpha < standPat)
+                alpha = standPat;
+            if (depth < -5) // cutoff after 5 consecutive captures to reduce time
+                return alpha;
+        }
+
+        int startingAlpha = alpha;
+
+        Move[] moves = theBoard.GetLegalMoves(qsearch);
+        if (moves.Length == 0)
+            return alpha;
+
+        int bestScore = alpha;
+        Move bestMove = moves[0];
+        if (root)
+            rootBestMove = bestMove;
+
+        int[] moveScores = new int[moves.Length];
+        for (int i = 0; i < moves.Length; i++)
+            moveScores[i] = moves[i] == tp.move ? INFINITY : MoveScore(moves[i]);
+
+        for (int i = 0; i < moves.Length; i++)
+        {
+            for (int j = i + 1; j < moves.Length; j++) // selection sort
+            {
+                if (moveScores[j] > moveScores[i])
+                {
+                    (moveScores[i], moveScores[j]) = (moveScores[j], moveScores[i]);
+                    (moves[i], moves[j]) = (moves[j], moves[i]);
+                }
+            }
+
+            theBoard.MakeMove(moves[i]);
+            int score = -Search(-beta, -alpha, depth - 1, false);
+            theBoard.UndoMove(moves[i]);
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestMove = moves[i];
+                if (root)
+                    rootBestMove = bestMove;
+            }
 
             if (score >= beta)
-                return beta;
+                break; 
             if (score > alpha)
                 alpha = score;
         }
-        return alpha;
-    }
 
-    public int AlphaBeta(int alpha, int beta, int depth)
-    {
-        if (depth == 0)
-            return Quiesce(alpha, beta, 0);
-        if (theBoard.IsDraw())
-            return 0;
-        Move[] moves = theBoard.GetLegalMoves();
-        foreach (Move move in moves)
+        if (!qsearch)
         {
-            theBoard.MakeMove(move);
-            int score = -AlphaBeta(-beta, -alpha, depth - 1);
-            theBoard.UndoMove(move);
-            if (score >= beta)
-                return beta;   //  fail hard beta-cutoff
-            if (score > alpha)
-                alpha = score; // alpha acts like max in MiniMax
+            tp.eval = bestScore;
+            tp.zKey = theBoard.ZobristKey;
+            tp.move = bestMove;
+            tp.depth = (sbyte)depth;
+            if (bestScore < startingAlpha)
+                tp.flag = UPPER;
+            else if (bestScore >= beta)
+                tp.flag = LOWER;
+            else 
+                tp.flag = EXACT;
         }
-        return alpha;
+
+        return bestScore;
     }
 
     public Move Think(Board board, Timer timer)
     {
         theBoard = board;
-        theTimer = timer;
 
-        // Unpack PST
-        if (compressed)
-        {
-            compressed = false;
-            int offset = 128;
-            for (int i = 0; i < 8 * 6; i++)
-            {
-                for (int j = 0; j < 8; j++)
-                {
-                    ulong mask = (ulong)0b11111111 << (8 * (7 - (j % 8)));
-                    ulong val = (ulong)(compressedPST[i] & mask) >> (8 * (7 - (j % 8)));
-                    int trueVal = (int)val - offset;
-                    PST[j + i * 8] = trueVal;
+        int maxDepth = 4;
+        int bestScore = Search(-INFINITY, INFINITY, maxDepth, true);
 
-                }
-            }
-        }
+        //Console.WriteLine($"{rootBestMove.StartSquare.Name}{rootBestMove.TargetSquare.Name} | {bestScore}");
 
-        int depth = 3;
-        Move[] moves = theBoard.GetLegalMoves();
-        Move bestMove = moves[0];
-        if (depth == 0) return bestMove;
-        int bestScore = -infinity;
-        int alpha = -infinity;
-        int beta = infinity;
-
-        foreach (Move move in moves)
-        {
-            theBoard.MakeMove(move);
-            int score = -AlphaBeta(-beta, -alpha, depth - 1);
-            theBoard.UndoMove(move);
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestMove = move;
-            }
-            //Console.WriteLine($"Move: {move.StartSquare.Name}{move.TargetSquare.Name} | Score: {score}");
-        }
-        //Console.WriteLine($"Best Move: {bestMove.StartSquare.Name}{bestMove.TargetSquare.Name} | Best Score: {bestScore}\n");
-        return bestMove;
+        return rootBestMove == Move.NullMove ? theBoard.GetLegalMoves()[0] : rootBestMove;
     }
 }

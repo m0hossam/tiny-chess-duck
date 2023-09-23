@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Chess_Challenge.src.My_Bot
 {
     // To use, copy and paste the pieceSquareTable and the Algorithm to MyBot.Think()
-    internal class CompressingPST
+    internal class PackingPST
     {
         public int[] pieceSquareTable =
         {
@@ -69,9 +65,9 @@ namespace Chess_Challenge.src.My_Bot
 
         public void Algorithm()
         {
-            // Compression
+            // Packing
             bool ok = true;
-            ulong[] compressed = new ulong[8 * 6];
+            ulong[] packed = new ulong[8 * 6];
 
             int offset = 128; //8bit offset to use unsigned
             ulong res = 0;
@@ -87,18 +83,18 @@ namespace Chess_Challenge.src.My_Bot
                 if ((i + 1) % 8 == 0) //output 64bit number and reset
                 {
                     //Console.WriteLine($"\n{res}\n\n");
-                    compressed[i / 8] = res;
+                    packed[i / 8] = res;
                     res = 0;
                 }
             }
 
-            // Decompression
+            // Unpacking
             for (int i = 0; i < 8 * 6; i++)
             {
                 for (int j = 0; j < 8; j++)
                 {
                     ulong mask = (ulong)0b11111111 << (8 * (7 - (j % 8)));
-                    ulong val = (ulong)(compressed[i] & mask) >> (8 * (7 - (j % 8)));
+                    ulong val = (ulong)(packed[i] & mask) >> (8 * (7 - (j % 8)));
                     int trueVal = (int)val - offset;
                     //Console.Write($"{trueVal}, ");
                     if (trueVal != pieceSquareTable[j + i * 8])
