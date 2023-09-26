@@ -1,8 +1,7 @@
 ﻿using System;
 using ChessChallenge.API;
 
-// I think hash collisions are causing blunders ??!
-// Packed PSTs are too large, need to use compressed 
+// I think TT hash collisions are causing blunders
 
 public class MyBot : IChessBot
 {
@@ -17,20 +16,16 @@ public class MyBot : IChessBot
 
         public Transposition() { }
     }
-    const ulong TPT_MASK = 0x7FFFFF;
-    const int INFINITY = 999999999;
     Move rootBestMove;
-    Transposition[] tpt = new Transposition[TPT_MASK + 1];
+    Transposition[] tpt = new Transposition[0x7FFFFF + 1];
     Board theBoard;
-    int[] 
-        gamePhaseInc = { 0, 1, 1, 2, 4, 0 }, 
+    int[]
+        piecePhaseValue = { 0, 1, 1, 2, 4, 0 },
         middlegamePieceValue = { 82, 337, 365, 477, 1025, 0 },
         endgamePieceValue = { 94, 281, 297, 512, 936, 0 },
-        middlegamePST = new int[384], 
-        endgamePST = new int[384];
-
+        unpackedPST = new int[768];
     ulong[] 
-        packedMiddlegamePST =
+        packedPST =
         {
             9259542123273814144,
             16357001140413309557,
@@ -79,10 +74,7 @@ public class MyBot : IChessBot
             5728408685346316109,
             8246770769504399717,
             9333560970455320968,
-            8188824274210166926
-        },
-        packedEndgamePST =
-        {
+            8188824274210166926,
             9259542123273814144,
             18374119105817541887,
             16061197207704294100,
@@ -136,20 +128,12 @@ public class MyBot : IChessBot
     public MyBot()
     {
         // Unpack PST
-        for (int i = 0; i < 48; i++)
+        for (int i = 0; i < 96; i++)
         {
             for (int j = 0; j < 8; j++)
             {
                 int shift = (8 * (7 - (j % 8)));
-                ulong 
-                    mask = (ulong)0b11111111 << shift,
-                    middlegameVal = (ulong)(packedMiddlegamePST[i] & mask) >> shift,
-                    endgameVal = (ulong)(packedEndgamePST[i] & mask) >> shift;
-                int
-                    middlegameTrueVal = (int)middlegameVal - 128,
-                    endgameTrueVal = (int)endgameVal - 128;
-                middlegamePST[j + i * 8] = middlegameTrueVal;
-                endgamePST[j + i * 8] = endgameTrueVal;
+                unpackedPST[j + i * 8] = (int)((packedPST[i] & ((ulong)0b11111111 << shift)) >> shift) - 128;
             }
         }
     }
@@ -175,22 +159,22 @@ public class MyBot : IChessBot
         PieceList[] pieceLists = theBoard.GetAllPieceLists();
         for (int i = 0; i < 12; i++)
         {
+            bool isWhitePieceList = pieceLists[i].IsWhitePieceList;
             for (int j = 0; j < pieceLists[i].Count; j++)
             {
                 int file = pieceLists[i].GetPiece(j).Square.File, 
                     rank = pieceLists[i].GetPiece(j).Square.Rank,
-                    index = pieceLists[i].IsWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
+                    index = isWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
 
-                middlegameScore += (middlegamePieceValue[i % 6] + middlegamePST[index + 64 * (i % 6)]) * (pieceLists[i].IsWhitePieceList ? 1 : -1);
-                endgameScore += (endgamePieceValue[i % 6] + endgamePST[index + 64 * (i % 6)]) * (pieceLists[i].IsWhitePieceList ? 1 : -1);
-                gamePhase += gamePhaseInc[i % 6];
+                middlegameScore += (middlegamePieceValue[i % 6] + unpackedPST[index + 64 * (i % 6)]) * (isWhitePieceList ? 1 : -1);
+                endgameScore += (endgamePieceValue[i % 6] + unpackedPST[48 + index + 64 * (i % 6)]) * (isWhitePieceList ? 1 : -1);
+                gamePhase += piecePhaseValue[i % 6];
             }
         }
 
         // Tapered Eval
         int middlegamePhase = Math.Min(24, gamePhase); // in case of early promotion
-        int endgamePhase = 24 - middlegamePhase;
-        return ((middlegameScore * middlegamePhase + endgameScore * endgamePhase) / 24) * (theBoard.IsWhiteToMove ? 1 : -1);
+        return ((middlegameScore * middlegamePhase + endgameScore * (24 - middlegamePhase)) / 24) * (theBoard.IsWhiteToMove ? 1 : -1);
     }
 
     /*
@@ -204,9 +188,9 @@ public class MyBot : IChessBot
         if (theBoard.IsDraw())
             return 0;
         if (theBoard.IsInCheckmate())
-            return -INFINITY; // should this be alpha? does it make a difference?
+            return -999999999; // should this be alpha? does it make a difference?
 
-        ref Transposition tp = ref tpt[theBoard.ZobristKey & TPT_MASK];
+        ref Transposition tp = ref tpt[theBoard.ZobristKey & 0x7FFFFF];
 
         if (!root && tp.zKey == theBoard.ZobristKey && tp.depth >= depth)
             if (tp.flag == 3 || (tp.flag == 1 && tp.eval >= beta) || (tp.flag == 2 && tp.eval <= alpha)) 
@@ -237,7 +221,7 @@ public class MyBot : IChessBot
 
         int[] moveScores = new int[moves.Length];
         for (int i = 0; i < moves.Length; i++)
-            moveScores[i] = moves[i] == tp.move ? INFINITY : MoveScore(moves[i]);
+            moveScores[i] = moves[i] == tp.move ? 999999999 : MoveScore(moves[i]);
 
         for (int i = 0; i < moves.Length; i++)
         {
@@ -284,9 +268,9 @@ public class MyBot : IChessBot
     {
         theBoard = board;
 
-        int maxDepth = BitboardHelper.GetNumberOfSetBits(theBoard.AllPiecesBitboard) < 7 ? 9 : 6;
+        int maxDepth = timer.MillisecondsRemaining < 3000 ? 5 : BitboardHelper.GetNumberOfSetBits(theBoard.AllPiecesBitboard) < 7 ? 9 : 6;
         for (int i = 1; i < maxDepth; i++)
-            Search(-INFINITY, INFINITY, i, true);
+            Search(-999999999, 999999999, i, true);
 
         return rootBestMove == Move.NullMove ? theBoard.GetLegalMoves()[0] : rootBestMove;
     }
