@@ -3,7 +3,7 @@ using System;
 
 namespace ChessChallenge.Example
 {
-    //TinyChessDuck 
+    //TinyChessDuck With No TT
     public class EvilBot : IChessBot
     {
         public const int infinity = 999999999;
