@@ -105,7 +105,7 @@ Compressed:
 
 PESTO
 
-MIDDLEGAME:
+//MIDDLEGAME:
 
 //Pawns
 0,   0,   0,   0,   0,   0,  0,   0,
@@ -211,7 +211,7 @@ MIDDLEGAME:
 9333560970455320968,
 8188824274210166926
 
-ENDGAME
+//ENDGAME
 
 //Pawns
 0,   0,   0,   0,   0,   0,   0,   0,

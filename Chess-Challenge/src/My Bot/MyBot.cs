@@ -143,7 +143,7 @@ public class MyBot : IChessBot
         for (int i = 0; i < 96; i++)
             for (int j = 0; j < 8; j++)
             {
-                int shift = (8 * (7 - (j % 8)));
+                int shift = (8 * (7 - j));
                 unpackedPST[j + i * 8] = (int)((packedPST[i] & ((ulong)0b11111111 << shift)) >> shift) - 128; // this is just bitmasking
             }
     }
@@ -200,7 +200,7 @@ public class MyBot : IChessBot
 
         ref Transposition tp = ref tpt[theBoard.ZobristKey & 0x7FFFFF];
 
-        if (!root && tp.zKey == theBoard.ZobristKey && tp.depth >= depth)
+        if (!root && tp.zKey == theBoard.ZobristKey && tp.depth > depth)
             if (tp.flag == 3 || (tp.flag == 1 && tp.eval >= beta) || (tp.flag == 2 && tp.eval <= alpha)) 
                 return tp.eval;
 
@@ -274,7 +274,11 @@ public class MyBot : IChessBot
 
         // max depth = 4 for low time, 5 for normal time, 8 for endgame
         for (int i = 1; i <= (timer.MillisecondsRemaining < 10000 ? 4 : BitboardHelper.GetNumberOfSetBits(theBoard.AllPiecesBitboard) < 7 ? 8 : 5); i++)
-            Search(-999999999, 999999999, i, true);
+        //{
+            /*int score = */Search(-999999999, 999999999, i, true);
+        //Console.WriteLine($"depth: {i} | move: {rootBestMove.StartSquare.Name}{rootBestMove.TargetSquare.Name} | eval: {score}");
+        //}
+        //Console.WriteLine();
 
         return rootBestMove == Move.NullMove ? theBoard.GetLegalMoves()[0] : rootBestMove;
     }

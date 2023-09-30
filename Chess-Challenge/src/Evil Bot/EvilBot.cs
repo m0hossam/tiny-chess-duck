@@ -3,193 +3,287 @@ using System;
 
 namespace ChessChallenge.Example
 {
-    //TinyChessDuck With No TT
+    /* TINY CHESS DUCK by rocketduck_m07
+     * 
+     * #################################
+     * 
+     * Features:
+     * - Fail-Soft Alpha Beta Search
+     * - Quiescent Search
+     * - MVV LVA Move Ordering
+     * - Transpostion Table
+     * - Iterative Deepening
+     * - Piece-Square Tables Only Evaluation
+     * 
+     * #################################
+     */
+
     public class EvilBot : IChessBot
     {
-        public const int infinity = 999999999;
-        public Board theBoard;
-        public Timer theTimer; //might be needed in the future (REMOVE IF UNNECESSARY)
-        public bool compressed = true;
-        public int[] pieceWeight = { 100, 320, 330, 500, 900, 20000 }; // P, N, B, R, Q, K
-        public int[] PST = new int[384];
-        public ulong[] compressedPST =
+        struct Transposition // credit goes to selenaut
         {
+            public ulong zKey = 0;
+            public Move move = Move.NullMove;
+            public int eval = 0;
+            public sbyte
+                depth = -128,
+                flag = 0; // INVALID = 0, LOWER = 1, UPPER = 2, EXACT = 3;
+
+            public Transposition() { }
+        }
+        Transposition[] tpt = new Transposition[0x7FFFFF + 1];
+        Board theBoard;
+        Move rootBestMove;
+        int[]
+            piecePhaseValue = { 0, 1, 1, 2, 4, 0 },
+            middlegamePieceValue = { 82, 337, 365, 477, 1025, 0 },
+            endgamePieceValue = { 94, 281, 297, 512, 936, 0 },
+            unpackedPST = new int[768];
+        // Packing algorithm can be found at https://github.com/m0hossam/tiny-chess-duck/blob/main/Chess-Challenge/src/My%20Bot/PackingPST.cs
+        ulong[] packedPST = {
         9259542123273814144,
-        12876550765177647794,
-        9982954933006404234,
-        9621248571257554309,
-        9259542209508704384,
-        9618411723462966149,
-        9622655752112605829,
+        16357001140413309557,
+        8829195605423724908,
+        8254401669090808169,
+        7313418688563415655,
+        7384914337435197812,
+        6737222767702746730,
         9259542123273814144,
-        5645370307605846094,
-        6371608862222478424,
-        7097825361929076834,
-        7099238255929820514,
-        7097830881046265954,
-        7099232736812631394,
-        6371608883781200984,
-        5645370307605846094,
-        7815564454513768044,
-        8538966182894534774,
-        8538971723570446454,
-        8540379098454001014,
-        8538977221128913014,
-        8541791970896022134,
-        8540373557778089334,
-        7815564454513768044,
+        11081220660097301,
+        3987876604305901423,
+        5889764664614570412,
+        8615829970516021910,
+        8323936949179225464,
+        7599697423020169584,
+        7154940515368202861,
+        1687519861085072745,
+        7170907476791297912,
+        7390528431378371153,
+        8117082644194436478,
+        8972740228098131838,
+        8830870139635010180,
+        9263780805260055178,
+        9552012216381055361,
+        6880781611516057963,
+        11577242485982338987,
+        11214168400861567660,
+        8904630919850999184,
+        7527071450275215468,
+        6658137190229968489,
+        6009895851999132511,
+        6084482357074295353,
+        7886789834650901350,
+        7241961428581395373,
+        7519176848743963830,
+        8318016057608023993,
+        7306369598957387393,
+        8603695488949846909,
+        8251286653394652805,
+        6735286635485691265,
+        9182408126746812750,
+        4582289962092626573,
+        11348908854965197411,
+        8617781306342151786,
+        8028920214486217308,
+        5728408685346316109,
+        8246770769504399717,
+        9333560970455320968,
+        8188824274210166926,
         9259542123273814144,
-        9622655881464941189,
-        8899254153084174459,
-        8899254153084174459,
-        8899254153084174459,
-        8899254153084174459,
-        8899254153084174459,
-        9259542144832536704,
-        7815564476072490604,
-        8538966182894534774,
-        8538971702011723894,
-        8899259672201363579,
-        9259547642391003259,
-        8540379076895277174,
-        8538971680452673654,
-        7815564476072490604,
-        7086511107012581474,
-        7086511107012581474,
-        7086511107012581474,
-        7086511107012581474,
-        7809912835393348204,
-        8533314606891560054,
-        10706323503566591124,
-        10709149248450633364
+        18374119105817541887,
+        16061197207704294100,
+        11572154847021273489,
+        10198820791839654783,
+        9549736231487373176,
+        10198551484841362041,
+        9259542123273814144,
+        5069491205526864157,
+        7455822975978661964,
+        7524541400582942039,
+        8035431733674084462,
+        7960834280560624750,
+        7601372000551791722,
+        6227482657520642388,
+        7155491318799420992,
+        8244812703126220648,
+        8681963116054150258,
+        9401405507207856260,
+        9045915848980202370,
+        8828055359350013303,
+        8394015409149540721,
+        8245661556352184677,
+        7599658875216755567,
+        10199125451369908357,
+        10055849173233928323,
+        9765923324499426173,
+        9548631222335405954,
+        9477131093459761269,
+        8971306245150767216,
+        8825507717624329597,
+        8611590021041063020,
+        8617240532094257812,
+        8040227885603724928,
+        7820089199224394633,
+        9481933937386764708,
+        7970407823045732247,
+        8099037312892111493,
+        7667768075636792416,
+        6873735846648900695,
+        3917408671579997295,
+        8399651535887701899,
+        9984928491787627661,
+        8689300325139585667,
+        7961402723962161525,
+        7889615596832196471,
+        7310895313622170479,
+        5430896352595961941
     };
+
+        public EvilBot()
+        {
+            // Unpack PST
+            for (int i = 0; i < 96; i++)
+                for (int j = 0; j < 8; j++)
+                {
+                    int shift = (8 * (7 - (j % 8)));
+                    unpackedPST[j + i * 8] = (int)((packedPST[i] & ((ulong)0b11111111 << shift)) >> shift) - 128; // this is just bitmasking
+                }
+        }
+
+        public int MoveScore(Move move)
+        {
+            int score = 0;
+
+            if (move.IsCapture)
+                score += 10 * middlegamePieceValue[(int)move.CapturePieceType - 1] - middlegamePieceValue[(int)move.MovePieceType - 1];
+            if (move.IsPromotion)
+                score += middlegamePieceValue[(int)move.PromotionPieceType - 1];
+
+            return score;
+        }
 
         public int Evaluate()
         {
-            if (theBoard.IsDraw())
-                return 0;
-            int materialScore = 0;
-            int activityScore = 0;
+            int gamePhase = 0;
+            int middlegameScore = 0;
+            int endgameScore = 0;
+
             PieceList[] pieceLists = theBoard.GetAllPieceLists();
             for (int i = 0; i < 12; i++)
             {
-                materialScore += pieceLists[i].Count * pieceWeight[i % 6] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
+                bool isWhitePieceList = pieceLists[i].IsWhitePieceList;
                 for (int j = 0; j < pieceLists[i].Count; j++)
                 {
-                    int file = pieceLists[i].GetPiece(j).Square.File; //column
-                    int rank = pieceLists[i].GetPiece(j).Square.Rank; //row
-                    int index = pieceLists[i].IsWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
-                    activityScore += PST[index + 64 * (i % 6)] * (pieceLists[i].IsWhitePieceList ? 1 : -1);
+                    int file = pieceLists[i].GetPiece(j).Square.File,
+                        rank = pieceLists[i].GetPiece(j).Square.Rank,
+                        index = isWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
+
+                    middlegameScore += (middlegamePieceValue[i % 6] + unpackedPST[index + 64 * (i % 6)]) * (isWhitePieceList ? 1 : -1);
+                    endgameScore += (endgamePieceValue[i % 6] + unpackedPST[48 + index + 64 * (i % 6)]) * (isWhitePieceList ? 1 : -1);
+                    gamePhase += piecePhaseValue[i % 6];
                 }
             }
 
-            int eval = (materialScore + activityScore) * (theBoard.IsWhiteToMove ? 1 : -1);
-            return eval;
+            // Tapered Eval
+            int middlegamePhase = Math.Min(24, gamePhase); // in case of early promotion
+            return ((middlegameScore * middlegamePhase + endgameScore * (24 - middlegamePhase)) / 24) * (theBoard.IsWhiteToMove ? 1 : -1);
         }
 
-        public Move[] OrderMoves(Move[] moves)
+        /*
+         * Credit goes to selenaut for TT code
+         * Credit goes to jw1912 for incremental sort and qsearch code
+         */
+        public int Search(int alpha, int beta, int depth, bool root)
         {
-            Array.Sort(moves, CaptureMoveComparer);
-            return moves;
-        }
+            if (theBoard.IsDraw())
+                return 0;
+            if (theBoard.IsInCheckmate())
+                return -999999999; // should this be alpha? does it make a difference?
 
-        public int CaptureMoveComparer(Move moveA, Move moveB) // MVV - LVA: Most Valuable Victim - Least Valuable Aggressor
-        {
-            return (pieceWeight[(int)moveB.CapturePieceType - 1] - pieceWeight[(int)moveB.MovePieceType - 1])
-                - (pieceWeight[(int)moveA.CapturePieceType - 1] - pieceWeight[(int)moveA.MovePieceType - 1]);
-        }
+            ref Transposition tp = ref tpt[theBoard.ZobristKey & 0x7FFFFF];
 
-        public int Quiesce(int alpha, int beta, int calls) //needs more time optimization
-        {
-            int standPat = Evaluate();
-            if (standPat >= beta)
-                return beta;
-            if (alpha < standPat)
-                alpha = standPat;
-            if (calls > 5) //cutoff after 5 consecutive captures to reduce time
-                return alpha;
-            Move[] moves = theBoard.GetLegalMoves(true); //captures only
-            moves = OrderMoves(moves);
-            foreach (Move move in moves)
+            if (!root && tp.zKey == theBoard.ZobristKey && tp.depth > depth)
+                if (tp.flag == 3 || (tp.flag == 1 && tp.eval >= beta) || (tp.flag == 2 && tp.eval <= alpha))
+                    return tp.eval;
+
+            bool qsearch = depth <= 0;
+            if (qsearch)
             {
-                theBoard.MakeMove(move);
-                int score = -Quiesce(-beta, -alpha, calls + 1);
-                theBoard.UndoMove(move);
+                int standPat = Evaluate();
+                if (standPat >= beta)
+                    return standPat;
+                alpha = Math.Max(alpha, standPat);
+                if (depth < -9) // cutoff after 9 consecutive captures to reduce time
+                    return alpha;
+            }
+
+            int startingAlpha = alpha;
+
+            Move[] moves = theBoard.GetLegalMoves(qsearch);
+            if (moves.Length == 0)
+                return alpha;
+            int bestEval = -1999999999;
+            Move bestMove = moves[0];
+
+            int[] moveScores = new int[moves.Length];
+            for (int i = 0; i < moves.Length; i++)
+                moveScores[i] = moves[i] == tp.move ? 999999999 : MoveScore(moves[i]);
+
+            for (int i = 0; i < moves.Length; i++)
+            {
+                for (int j = i + 1; j < moves.Length; j++) // selection sort
+                {
+                    if (moveScores[j] > moveScores[i])
+                    {
+                        (moveScores[i], moveScores[j]) = (moveScores[j], moveScores[i]);
+                        (moves[i], moves[j]) = (moves[j], moves[i]);
+                    }
+                }
+
+                theBoard.MakeMove(moves[i]);
+                int score = -Search(-beta, -alpha, depth - 1, false);
+                theBoard.UndoMove(moves[i]);
+
+                if (score > bestEval)
+                {
+                    bestEval = score;
+                    bestMove = moves[i];
+                    if (root)
+                        rootBestMove = bestMove;
+                }
 
                 if (score >= beta)
-                    return beta;
+                    break;
                 if (score > alpha)
                     alpha = score;
             }
-            return alpha;
-        }
 
-        public int AlphaBeta(int alpha, int beta, int depth)
-        {
-            if (depth == 0)
-                return Quiesce(alpha, beta, 0);
-            if (theBoard.IsDraw())
-                return 0;
-            Move[] moves = theBoard.GetLegalMoves();
-            foreach (Move move in moves)
+            if (!qsearch)
             {
-                theBoard.MakeMove(move);
-                int score = -AlphaBeta(-beta, -alpha, depth - 1);
-                theBoard.UndoMove(move);
-                if (score >= beta)
-                    return beta;   //  fail hard beta-cutoff
-                if (score > alpha)
-                    alpha = score; // alpha acts like max in MiniMax
+                tp.eval = bestEval;
+                tp.zKey = theBoard.ZobristKey;
+                tp.move = bestMove;
+                tp.depth = (sbyte)depth;
+                tp.flag = (sbyte)(bestEval < startingAlpha ? 2 : bestEval >= beta ? 1 : 3);
             }
-            return alpha;
+
+            return bestEval;
         }
 
         public Move Think(Board board, Timer timer)
         {
             theBoard = board;
-            theTimer = timer;
 
-            // Unpack PST
-            if (compressed)
-            {
-                compressed = false;
-                int offset = 128;
-                for (int i = 0; i < 8 * 6; i++)
-                {
-                    for (int j = 0; j < 8; j++)
-                    {
-                        ulong mask = (ulong)0b11111111 << (8 * (7 - (j % 8)));
-                        ulong val = (ulong)(compressedPST[i] & mask) >> (8 * (7 - (j % 8)));
-                        int trueVal = (int)val - offset;
-                        PST[j + i * 8] = trueVal;
+            // max depth = 4 for low time, 5 for normal time, 8 for endgame
+            for (int i = 1; i <= (timer.MillisecondsRemaining < 10000 ? 4 : BitboardHelper.GetNumberOfSetBits(theBoard.AllPiecesBitboard) < 7 ? 8 : 5); i++)
+                //{
+                /*int score = */
+                Search(-999999999, 999999999, i, true);
+            //Console.WriteLine($"depth: {i} | move: {rootBestMove.StartSquare.Name}{rootBestMove.TargetSquare.Name} | eval: {score}");
+            //}
+            //Console.WriteLine();
 
-                    }
-                }
-            }
-
-            int depth = 3;
-            Move[] moves = theBoard.GetLegalMoves();
-            Move bestMove = moves[0];
-            if (depth == 0) return bestMove;
-            int bestScore = -infinity;
-            int alpha = -infinity;
-            int beta = infinity;
-
-            foreach (Move move in moves)
-            {
-                theBoard.MakeMove(move);
-                int score = -AlphaBeta(-beta, -alpha, depth - 1);
-                theBoard.UndoMove(move);
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestMove = move;
-                }
-                //Console.WriteLine($"Move: {move.StartSquare.Name}{move.TargetSquare.Name} | Score: {score}");
-            }
-            //Console.WriteLine($"Best Move: {bestMove.StartSquare.Name}{bestMove.TargetSquare.Name} | Best Score: {bestScore}\n");
-            return bestMove;
+            return rootBestMove == Move.NullMove ? theBoard.GetLegalMoves()[0] : rootBestMove;
         }
     }
 }
