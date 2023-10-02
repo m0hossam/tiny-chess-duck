@@ -3,21 +3,6 @@ using System;
 
 namespace ChessChallenge.Example
 {
-    /* TINY CHESS DUCK by rocketduck_m07
-     * 
-     * #################################
-     * 
-     * Features:
-     * - Fail-Soft Alpha Beta Search
-     * - Quiescent Search
-     * - MVV LVA Move Ordering
-     * - Transpostion Table
-     * - Iterative Deepening
-     * - Piece-Square Tables Only Evaluation
-     * 
-     * #################################
-     */
-
     public class EvilBot : IChessBot
     {
         struct Transposition // credit goes to selenaut
@@ -145,7 +130,7 @@ namespace ChessChallenge.Example
             for (int i = 0; i < 96; i++)
                 for (int j = 0; j < 8; j++)
                 {
-                    int shift = (8 * (7 - (j % 8)));
+                    int shift = (8 * (7 - j));
                     unpackedPST[j + i * 8] = (int)((packedPST[i] & ((ulong)0b11111111 << shift)) >> shift) - 128; // this is just bitmasking
                 }
         }
@@ -164,9 +149,10 @@ namespace ChessChallenge.Example
 
         public int Evaluate()
         {
-            int gamePhase = 0;
-            int middlegameScore = 0;
-            int endgameScore = 0;
+            int gamePhase = 0,
+                middlegameScore = 0,
+                endgameScore = 0;
+
 
             PieceList[] pieceLists = theBoard.GetAllPieceLists();
             for (int i = 0; i < 12; i++)
@@ -174,8 +160,9 @@ namespace ChessChallenge.Example
                 bool isWhitePieceList = pieceLists[i].IsWhitePieceList;
                 for (int j = 0; j < pieceLists[i].Count; j++)
                 {
-                    int file = pieceLists[i].GetPiece(j).Square.File,
-                        rank = pieceLists[i].GetPiece(j).Square.Rank,
+                    Piece piece = pieceLists[i].GetPiece(j);
+                    int file = piece.Square.File,
+                        rank = piece.Square.Rank,
                         index = isWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
 
                     middlegameScore += (middlegamePieceValue[i % 6] + unpackedPST[index + 64 * (i % 6)]) * (isWhitePieceList ? 1 : -1);

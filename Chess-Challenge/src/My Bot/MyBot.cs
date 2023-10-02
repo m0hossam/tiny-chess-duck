@@ -1,14 +1,15 @@
 ﻿using System;
 using ChessChallenge.API;
 
-/* TINY CHESS DUCK by rocketduck_m07
+/* TINY CHESS DUCK by @rocketduck_m07
  * 
  * #################################
  * 
  * Features:
+ * 
  * - Fail-Soft Alpha Beta Search
  * - Quiescent Search
- * - MVV LVA Move Ordering
+ * - MVV-LVA Move Ordering
  * - Transpostion Table
  * - Iterative Deepening
  * - Piece-Square Tables Only Evaluation
@@ -162,9 +163,10 @@ public class MyBot : IChessBot
 
     public int Evaluate()
     {
-        int gamePhase = 0;
-        int middlegameScore = 0;
-        int endgameScore = 0;
+        int gamePhase = 0,
+            middlegameScore = 0,
+            endgameScore = 0;
+
 
         PieceList[] pieceLists = theBoard.GetAllPieceLists();
         for (int i = 0; i < 12; i++)
@@ -172,8 +174,9 @@ public class MyBot : IChessBot
             bool isWhitePieceList = pieceLists[i].IsWhitePieceList;
             for (int j = 0; j < pieceLists[i].Count; j++)
             {
-                int file = pieceLists[i].GetPiece(j).Square.File, 
-                    rank = pieceLists[i].GetPiece(j).Square.Rank,
+                Square square = pieceLists[i].GetPiece(j).Square;
+                int file = square.File, 
+                    rank = square.Rank,
                     index = isWhitePieceList ? file + (8 * (7 - rank)) : file + (8 * rank);
 
                 middlegameScore += (middlegamePieceValue[i % 6] + unpackedPST[index + 64 * (i % 6)]) * (isWhitePieceList ? 1 : -1);
@@ -220,6 +223,7 @@ public class MyBot : IChessBot
         Move[] moves = theBoard.GetLegalMoves(qsearch);
         if (moves.Length == 0)
             return alpha;
+
         int bestEval = -1999999999;
         Move bestMove = moves[0];
 
@@ -229,7 +233,7 @@ public class MyBot : IChessBot
 
         for (int i = 0; i < moves.Length; i++)
         {
-            for (int j = i + 1; j < moves.Length; j++) // selection sort
+            for (int j = i + 1; j < moves.Length; j++) // incremental selection sort
             {
                 if (moveScores[j] > moveScores[i])
                 {
@@ -274,11 +278,7 @@ public class MyBot : IChessBot
 
         // max depth = 4 for low time, 5 for normal time, 8 for endgame
         for (int i = 1; i <= (timer.MillisecondsRemaining < 10000 ? 4 : BitboardHelper.GetNumberOfSetBits(theBoard.AllPiecesBitboard) < 7 ? 8 : 5); i++)
-        //{
-            /*int score = */Search(-999999999, 999999999, i, true);
-        //Console.WriteLine($"depth: {i} | move: {rootBestMove.StartSquare.Name}{rootBestMove.TargetSquare.Name} | eval: {score}");
-        //}
-        //Console.WriteLine();
+            Search(-999999999, 999999999, i, true);
 
         return rootBestMove == Move.NullMove ? theBoard.GetLegalMoves()[0] : rootBestMove;
     }
