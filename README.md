@@ -6,11 +6,11 @@
 
 ## Table of Contents
 
-- [Objective](https://github.com/m0hossam/tiny-chess-duck#objective)
-- [The AI](https://github.com/m0hossam/tiny-chess-duck#the-ai)
-- [Results](https://github.com/m0hossam/tiny-chess-duck#results)
-- [Try It](https://github.com/m0hossam/tiny-chess-duck#try-it)
-- [Credits](https://github.com/m0hossam/tiny-chess-duck#credits)
+- [Objective](#objective)
+- [The AI](#the-ai)
+- [Results](#results)
+- [Try It](#try-it)
+- [Credits](#credits)
 
 ## Objective
 
